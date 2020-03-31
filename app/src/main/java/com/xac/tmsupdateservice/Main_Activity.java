@@ -1,7 +1,10 @@
 package com.xac.tmsupdateservice;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -14,6 +17,21 @@ public class Main_Activity extends Activity {
         super.onCreate(savedInstanceState);
         Log.i("Main_Activity","onCreate");
         setContentView(R.layout.activity_main);
+        //permission
+        if (Build.VERSION.SDK_INT >= 23) {
+            int REQUEST_CODE_PERMISSION_STORAGE = 100;
+            String[] permissions = {
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            };
+
+            for (String str : permissions) {
+                if (this.checkSelfPermission(str) != PackageManager.PERMISSION_GRANTED) {
+                    this.requestPermissions(permissions, REQUEST_CODE_PERMISSION_STORAGE);
+                    return;
+                }
+            }
+        }
     }
 
     @Override
