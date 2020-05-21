@@ -1,6 +1,21 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+        QCOM_RELEASE {
+            storeFile file('G:\\keystore\\qcom-platform.keystore')
+            storePassword 'xacsaio'
+            keyAlias = 'qcom-platform'
+            keyPassword 'xacsaio'
+        }
+        xop_platform {
+            keyAlias 'xop-platform'
+            keyPassword 'xacsaio'
+            storeFile file('G:/keystore/xop-platform.keystore')
+            storePassword 'xacsaio'
+
+        }
+    }
     compileSdkVersion 29
     buildToolsVersion "29.0.0"
 
@@ -8,16 +23,27 @@ android {
         applicationId "com.xac.tmsupdateservice"
         minSdkVersion 16
         targetSdkVersion 29
-        versionCode 1
-        versionName "1.0"
+        versionCode 3
+        versionName '1.0.3'
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        signingConfig signingConfigs.QCOM_RELEASE
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        release_qcom_Plat {
+            signingConfig signingConfigs.QCOM_RELEASE
+            debuggable = true
+            jniDebuggable = false
+        }
+        release_XOP_platform {
+            debuggable true
+            jniDebuggable false
+            signingConfig signingConfigs.xop_platform
         }
     }
 

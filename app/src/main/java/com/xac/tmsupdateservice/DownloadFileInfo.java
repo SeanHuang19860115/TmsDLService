@@ -10,6 +10,11 @@ public class DownloadFileInfo {
     public String hashValue;
     //对象
     public File file;
+    //是否强制更新
+    public Boolean bUpdate;
+
+    //APK的版本
+    public long versionCode;
     //文件类型
     public String fileType;
     //文件下载路径
@@ -19,7 +24,6 @@ public class DownloadFileInfo {
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
-
 
     public void setHashValue(String hashValue) {
         this.hashValue = hashValue;
@@ -58,6 +62,12 @@ public class DownloadFileInfo {
         return fileURL;
     }
 
+    public long getVersionCode() {
+        return versionCode;
+    }
 
+    public void setVersionCode(long versionCode) {
+        this.versionCode = versionCode;
+    }
 
 }
