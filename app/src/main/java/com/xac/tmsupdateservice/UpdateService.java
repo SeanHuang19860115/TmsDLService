@@ -669,15 +669,11 @@ public class UpdateService extends Service {
                             }else{
                                 bFailedInstalled++;
                                 Log.e(TAG,"Install failed 5 times : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled);
-
-                                postLogToBackEnd(ERROR,"startUpdate_002_1","Install failed 5 times : " + fileInfo.fileName);
+                               // postLogToBackEnd(ERROR,"startUpdate_002_1","Install failed 5 times : " + fileInfo.fileName);
                                 postLogToBackEnd(INFO,"startUpdate_002_2",("Install failed 5 times : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled));
                                 updateResult(fileInfo);
                             }
-                            //发送错误代码给服务器
-                            //postLogToBackEnd("100");
                         }
-
                         if (!strResult.isEmpty()){
                             Log.i(TAG, "[Install ] " + strResult);
                             postLogToBackEnd(INFO,"startUpdate_003","[Install ] " + strResult);
