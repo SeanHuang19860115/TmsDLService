@@ -16,9 +16,9 @@ public class Constant{
     public static final  String T3="Paypoint-T3";
 
 //platform
-    public static final  String BSP1XX="XNP_Android_4.2.2";
-    public static final  String BSP2XX="XNP_Android_4.4.2";
-    public static final  String BSP3XX="XNP_Android_6.0.1";
+    public static final  String BSP1XX="NXP Android 4.2.2";
+    public static final  String BSP2XX="NXP Android 4.4.2";
+    public static final  String BSP3XX="NXP Android 6.0.1";
     public static final  String BSP4XX="Qualcomm_Android_6.0.1";
     public static final  String BSP5XX="Allwinner_Android_6.0.1";
     public static final  String BSP6XX="Qualcomm_Android_8.1.0";

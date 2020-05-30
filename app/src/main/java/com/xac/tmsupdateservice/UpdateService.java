@@ -1,5 +1,6 @@
 package com.xac.tmsupdateservice;
 
+import android.Manifest;
 import android.app.DownloadManager;
 import android.app.Service;
 import android.content.Context;
@@ -10,6 +11,7 @@ import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
@@ -44,10 +46,13 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.TimerTask;
+
+import saioapi.util.SaioService;
 
 public class UpdateService extends Service {
-    private String INFO="Info";
-    private String ERROR="Error";
+    private String INFO="TMS_DOWNLOAD_INFO";
+    private String ERROR="TMS_DOWNLOAD_ERROR";
     private String WARNING="Warning";
     private String TAG="UpdateService";
     /* 设备BuildNo*/
@@ -57,7 +62,7 @@ public class UpdateService extends Service {
     /* 设备名称*/
     private String strProductName;
     /*OS 版本*/
-    private String strSystemVer;
+    //private String strSystemVer=Constant.BSP4XX;
     /* Agent安装标志*/
     private Boolean bAgentInstalled=false;
     /*AgentSDK 安装标志*/
@@ -112,8 +117,9 @@ public class UpdateService extends Service {
     /*所有要更新的文件名*/
     private List<String> fileNames=new ArrayList<>();
     private int bFailedInstalled=0;
-
+    private final String strDownLoadPath="/storage/emulated/0/Download/";
     private final int RETRY_COUNT=100;
+    SaioService saioService=null;
 
     @Nullable
     @Override
@@ -125,7 +131,9 @@ public class UpdateService extends Service {
     public void onCreate() {
         super.onCreate();
         Log.i(TAG,"onCreate");
+        saioService=new SaioService(this);
         initDeviceInfo();
+        postLogToBackEnd(INFO,"------------------------","TMSDownLoadService Start------------------------");
         checkApp(false);
     }
 
@@ -154,15 +162,25 @@ public class UpdateService extends Service {
         Log.i(TAG,"WebView is installed:"+ bWebViewInstalled);
 
         if (!bFinishDownload){
-            if (bAgentSDKInstalled){
-                postLogToBackEnd(INFO,"checkApp_001","Agent exist,Version:"+currentAgentVer+",VerCode:"+currentAgentVer);
-            }else if (bAgentSDKInstalled){
-                postLogToBackEnd(INFO,"checkApp_002","AgentSDK exist,Version:"+currentSDKVerCode+",VerCode:"+currentSDKVer);
-            }else if (bWebViewInstalled){
-                postLogToBackEnd(INFO,"checkApp_003","WebView exist,Version:"+currentWebViewVerCode+",VerCode:"+currentWebViewVer);
-            }else{
+            if (bAgentInstalled){
+                Log.i(TAG,"Agent exist,Version:"+currentAgentVer+",VerCode:"+currentAgentVerCode);
+                postLogToBackEnd(INFO,"checkApp_001","Agent exist,Version:"+currentAgentVer+",VerCode:"+currentAgentVerCode);
+            }
+            if(bAgentSDKInstalled){
+                Log.i(TAG,"AgentSDK exist,Version:"+currentSDKVer+",VerCode:"+currentSDKVerCode);
+                postLogToBackEnd(INFO,"checkApp_002","AgentSDK exist,Version:"+currentSDKVer+",VerCode:"+currentSDKVerCode);
+            }
+            if (bWebViewInstalled){
+                Log.i(TAG,"WebView exist,Version:"+currentWebViewVer+",VerCode:"+currentWebViewVerCode);
+                postLogToBackEnd(INFO,"checkApp_003","WebView exist,Version:"+currentWebViewVer+",VerCode:"+currentWebViewVerCode);
+            }
+            if (!bAgentSDKInstalled&&!bAgentInstalled&&!bWebViewInstalled){
+                Log.i(TAG,"None of required APP installed");
                 postLogToBackEnd(INFO,"checkApp_004","None of required APP installed");
             }
+//           else{
+//                postLogToBackEnd(INFO,"checkApp_004","None of required APP installed");
+//           }
         }
         return bFinishDownload && bAgentInstalled && bAgentSDKInstalled && bWebViewInstalled;
     }
@@ -174,36 +192,9 @@ public class UpdateService extends Service {
             Log.i(TAG,"ProductName:"+strProductName);
             strBuildNo=  StaticInfo.getBuildNo();
             Log.i(TAG,"BuildNo:"+strBuildNo);
-            switch ( android.os.Build.VERSION.SDK){
-                case "17":
-                    strSystemVer=Constant.BSP2XX;
-                    break;
-                case "27":
-                    strSystemVer=Constant.BSP6XX;
-                    break;
-                default:
-                    if (strBuildNo.contains("-")){
-                        String[] strBsp= strBuildNo.split("-");
-                        if (strBsp.length==4){
-                            String currentBSP=strBsp[2];
-                            switch (currentBSP){
-                                case "301":
-                                    strSystemVer=Constant.BSP3XX;
-                                    break;
-                                case "401":
-                                    strSystemVer=Constant.BSP4XX;
-                                    break;
-                                case "501":
-                                    strSystemVer=Constant.BSP5XX;
-                                    break;
-                            }
-                        }
-                    }
-                    break;
-            }
             strSN=StaticInfo.getSN();
             Log.i(TAG,"SN:"+strSN);
-            postLogToBackEnd(INFO,"initDeviceInfo_001","Init device info success,BuildNo:"+strBuildNo+",OSVersion:"+strSystemVer+",SN"+strSN+",ModuleName:"+strProductName);
+            postLogToBackEnd(INFO,"initDeviceInfo_001","Init device info success,BuildNo:"+strBuildNo+",SN"+strSN+",ModuleName:"+strProductName);
         }catch(Exception ex){
             postLogToBackEnd(ERROR,"initDeviceInfo_001","Init device info fail:"+ex.toString());
         }
@@ -216,9 +207,6 @@ public class UpdateService extends Service {
         workThreadStart();
         //向后台查询具体任务
         //如果三个APP都安装完毕，则直接启动Agent即可
-//        if (bWebViewInstalled&&bAgentSDKInstalled&&bAgentInstalled){
-//            startAgent();
-//        }
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -228,7 +216,7 @@ public class UpdateService extends Service {
         RequestBody body = new FormEncodingBuilder()
                 .add("ModuleName", strProductName)
                 .add("BuildNo",strBuildNo)
-                .add("Platform",strSystemVer)
+                //.add("Platform",strSystemVer)
                 .add("SN",strSN)
                 .build();
 
@@ -256,6 +244,7 @@ public class UpdateService extends Service {
                     jsonObj = new JSONObject(body);
                    String strResponse=(String)jsonObj.get("status");
                     if (strResponse.equals("succeeded")){
+                        listUrls.clear();
                         JSONArray json=jsonObj.getJSONArray("downloadUrl");
                         for (int i=0;i<json.length();i++){
                             JSONObject object=json.getJSONObject(i);
@@ -264,7 +253,8 @@ public class UpdateService extends Service {
                         /*JSONObject object=json.getJSONObject(0);
                         listUrls.add(object);*/
                         bSuccessGetUrl=true;
-
+                        Log.i(TAG,"Get URL from Backend success,Ready to download");
+                        postLogToBackEnd(INFO,"getTaskFromBackEnd_002 ","Get url from backend success");
                     }else{
                         Log.e("UpdateService","Get url from backend fail:"+strResponse);
                         postLogToBackEnd(ERROR,"getTaskFromBackEnd_003 ","Get url from backend fail:"+strResponse);
@@ -281,7 +271,7 @@ public class UpdateService extends Service {
     }
 
     private void postLogToBackEnd(String strTag, final String strWhere, final String strValue) {
-        Log.i("LogInfo","Call postLog location:"+strWhere);
+      //  Log.i("LogInfo","Call postLog location:"+strWhere);
         OkHttpClient client = new OkHttpClient().setProtocols(Collections.singletonList(Protocol.HTTP_1_1));
         RequestBody body = new FormEncodingBuilder()
                 .add("id",strSN)
@@ -322,6 +312,7 @@ public class UpdateService extends Service {
         });
     }
 
+    List<DownloadFileInfo> lists=null;
     //获取Wifi连接状态
     private void workThreadStart(){
         new Thread(new Runnable() {
@@ -329,10 +320,10 @@ public class UpdateService extends Service {
             public void run() {
                 ConnectivityManager mConnectivityManager = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
                 assert mConnectivityManager != null;
-                mNetworkInfo= mConnectivityManager.getActiveNetworkInfo();
-                while (mNetworkInfo == null) {
+                mNetworkInfo = mConnectivityManager.getActiveNetworkInfo();
+                while ( mNetworkInfo==null) {
                     try {
-                        //Log.i("UpdateService", "[Network] Wait Network Connected.");
+                        Log.i("UpdateService", "[Network] Wait Network Connected.");
                         Thread.sleep(10000);
                         mNetworkInfo = mConnectivityManager.getActiveNetworkInfo();
                     } catch (Exception e) {
@@ -340,8 +331,8 @@ public class UpdateService extends Service {
                         Log.e("workThreadStart",e.toString());
                     }
                 }
-                Log.i(TAG,"Wifi connected");
-                postLogToBackEnd(INFO,"workThreadStart_001","Wifi connected");
+                Log.i(TAG,"Network available ~");
+                postLogToBackEnd(INFO,"workThreadStart_001","Network available");
                 //从服务器获取指定需要更新的APP的URL
                 while (!bSuccessGetUrl){
                     try {
@@ -353,45 +344,118 @@ public class UpdateService extends Service {
                         Log.e("workThreadStart_01",e.toString());
                     }
                 }
-                Log.i(TAG,"Get URL from Backend success,Ready to download");
-                postLogToBackEnd(INFO,"getTaskFromBackEnd_002 ","Get url from backend success");
+
                 //URL下载成功并且没有需要更新的APP
                 //执行启动Agent
                if (bSuccessGetUrl&&listUrls.size()==0){
                   // startAgent();   //目前不需要Download AP来启动了，由Installer启动
                    postLogToBackEnd(INFO,"workThreadStart_002","Get URL length=0,ready to shutdown updateService");
                    stopSelf();
+                 //  saioService.reboot("TMSDownLoad Service Reboot test");
                }else{
-                 //开始执行下载
-                   postLogToBackEnd(INFO,"workThreadStart_003","Get URL from Backend success,Ready to download");
-                   startDownloadAPP();
+                    lists=InitUpdateConfig();
+                   if (lists!=null){
+                       //开始执行下载
+                       postLogToBackEnd(INFO,"workThreadStart_003","Get URL from Backend success,Total will update APK count:"+lists.size());
+                       startDownloadAPP(lists);
+                   }else{
+                       postLogToBackEnd(INFO,"workThreadStart_004","No download object find ,service will shutdown...");
+                       stopSelf();
+                   }
                }
             }
         }).start();
     }
 
-    //执行下载流程
-    public void startDownloadAPP(){
+    //初始化更新事项
+    public List<DownloadFileInfo> InitUpdateConfig() {
+        List<DownloadFileInfo> listDownLoadFileInfos= new ArrayList<>();
+        listDownLoadFileInfos.clear();
+        fileNames.clear();
         if (listUrls==null)
-            return;
+            return null;
         for (JSONObject url:listUrls) {
             try {
                 DownloadFileInfo fileInfo=new DownloadFileInfo();
                 fileInfo.fileName =(String)url.get("fileName");
                 fileInfo.hashValue =(String)url.get("hash");
+                fileInfo.packageName=(String)url.get("packageName");
                 fileInfo.fileURL=(String)url.get("url");
                 fileInfo.fileType =(String)url.get("type");
-                fileInfo.bUpdate=url.getBoolean("forceUpdate");  //强制更新flag
+                fileInfo.bForceUpdate=url.getBoolean("forceUpdate");  //强制更新flag
                 fileInfo.versionCode=url.getLong("versionCode");
-                fileNames.add(fileInfo.fileName);
-                Log.i(TAG,"Start to download fileName:"+fileInfo.fileName+"\n URL:"+fileInfo.fileURL+"hashValue:"+fileInfo.hashValue+"versionCode:"+fileInfo.versionCode+"forceUpdate:"+fileInfo.bUpdate);
-                postLogToBackEnd(INFO,"workThreadStart_004","Start to download file,Name:"+fileInfo.fileName+"\n URL:"+fileInfo.fileURL+"hashValue:"+fileInfo.hashValue+" versionCode:"+fileInfo.versionCode+" forceUpdate:"+fileInfo.bUpdate);
-                doDownload(fileInfo);
-            } catch (JSONException e) {
+                if (checkIfUpdate(fileInfo)){
+                    fileNames.add(fileInfo.fileName);
+                    listDownLoadFileInfos.add(fileInfo);
+                    Log.i(TAG,"Start to download fileName:"+fileInfo.fileName+"\n URL:"+fileInfo.fileURL+"hashValue:"+fileInfo.hashValue+"versionCode:"+fileInfo.versionCode+"forceUpdate:"+fileInfo.bForceUpdate+" PackageName:"+fileInfo.packageName);
+                    postLogToBackEnd(INFO,"InitUpdateConfig","InitUpdateConfig OK,Will update APK Name-----:"+fileInfo.fileName+" URL:"+fileInfo.fileURL+"hashValue:"+fileInfo.hashValue+" versionCode:"+fileInfo.versionCode+" forceUpdate:"+fileInfo.bForceUpdate+" PackageName:"+fileInfo.packageName);
+                }
+
+              //  doDownload(fileInfo);
+            } catch (Exception e) {
                 //e.printStackTrace();
                 Log.e("workThreadStart_005",e.toString());
-                postLogToBackEnd(ERROR,"workThreadStart_005","Format URL error:"+e.toString());
+                postLogToBackEnd(ERROR,"InitUpdateConfig_Err","Format URL error:"+e.toString());
+                return null;
             }
+        }
+        return listDownLoadFileInfos;
+    }
+
+    public Boolean checkIfUpdate(DownloadFileInfo fileInfo){
+        Boolean bNeedUpdate;
+
+        if (!fileInfo.fileType.equals("APP"))
+            return false;
+        //强制更新的肯定是要更新
+        if (fileInfo.bForceUpdate) {
+            return true;
+        }
+        postLogToBackEnd(INFO,"checkIfUpdate_01","FileName:"+fileInfo.fileName+" CodeVersion:"+fileInfo.versionCode);
+        switch (fileInfo.packageName){
+            case strAgentPackageName:
+                if (currentAgentVerCode < fileInfo.versionCode){
+                    bNeedUpdate=true;
+                    postLogToBackEnd(INFO,"checkIfUpdate","Agent will update");
+                }else{
+                    bNeedUpdate=false;
+                    postLogToBackEnd(INFO,"checkIfUpdate","Current Agent Version is higher ,No need to update");
+                }
+                break;
+            case strAgentSdkPackageName:
+                if (currentSDKVerCode < fileInfo.versionCode){
+                    bNeedUpdate=true;
+                    postLogToBackEnd(INFO,"checkIfUpdate","AgentSDK will update");
+                }else{
+                    bNeedUpdate=false;
+                    postLogToBackEnd(INFO,"checkIfUpdate","Current AgentSDK Version is higher ,No need to update");
+                }
+                break;
+            case strWebViewPackageName:
+            case strWebViewGooglePackageName:
+                if (currentWebViewVerCode < fileInfo.versionCode){
+                    bNeedUpdate=true;
+                    postLogToBackEnd(INFO,"checkIfUpdate","WebView will update");
+                }else{
+                    bNeedUpdate=false;
+                    postLogToBackEnd(INFO,"checkIfUpdate","Current WebView Version is higher ,No need to update");
+                }
+                break;
+            default:
+                bNeedUpdate=true;
+                postLogToBackEnd(INFO,"checkIfUpdate",fileInfo.fileName+" will update");
+                break;
+        }
+
+        return bNeedUpdate;
+    }
+
+    //执行下载流程
+    public void startDownloadAPP(List<DownloadFileInfo> listUpdate){
+        if (listUpdate==null)
+            return;
+        for (DownloadFileInfo fileInfo:listUpdate) {
+            doDownload(fileInfo);
         }
     }
 
@@ -413,8 +477,9 @@ public class UpdateService extends Service {
         final DownloadManager downloadManager=(DownloadManager)getSystemService(Context.DOWNLOAD_SERVICE);
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(fileInfo.fileURL));
 
-        request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI);
-        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
+        //request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI);
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN);
+        //request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE);
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileInfo.fileName);
 
         assert downloadManager != null;
@@ -450,9 +515,10 @@ public class UpdateService extends Service {
                             Log.i(TAG,"Get Download file hash:"+currentHash+"\n SeverHash:"+fileInfo.hashValue);
                             postLogToBackEnd(INFO,"downloadListener_001","Download success,fileName:"+fileInfo.fileName+",hash:"+currentHash+"\n SeverHash:"+fileInfo.hashValue);
                             assert currentHash != null;
-                            if (currentHash.equals(fileInfo.hashValue)||true){
+                            if (currentHash.equalsIgnoreCase(fileInfo.hashValue)){
                                 checkSumErrorCount=0;
-                                checkUpdateItem(fileInfo);
+                                startUpdate(fileInfo);
+                             //   checkUpdateItem(fileInfo);
                             }else{ //校验码失败，重新下载
                                 if (checkSumErrorCount<3){
                                     checkSumErrorCount++;
@@ -461,8 +527,9 @@ public class UpdateService extends Service {
                                 }else{
                                   //给后台发送错误码
                                   Log.e(TAG,"CheckSum error");
-                                    postLogToBackEnd(ERROR,"downloadListener_003","CheckSum error for 3 times");
-                                  return;
+                                    postLogToBackEnd(ERROR,"downloadListener_003","CheckSum error for 3 times,Update "+fileInfo.fileName+" fail!");
+                                    bFailedInstalled++;
+                                    updateResult(fileInfo);
                                 }
                             }
                             break;
@@ -496,6 +563,9 @@ public class UpdateService extends Service {
                                 case DownloadManager.ERROR_UNKNOWN:
                                     Reason="the download has completed with an error that doesn't fit under any other error code.";
                                     break;
+                                default:
+                                    Reason="Error Code:"+errorCode;
+                                    break;
                             }
 
                             Log.i(TAG,"[Failed] "+Reason);
@@ -515,7 +585,6 @@ public class UpdateService extends Service {
                                 //发送log
                                 postLogToBackEnd(ERROR,"downloadListener_005","Download fail 5 times: fileName:"+fileInfo.fileName+"URL:"+fileInfo.fileURL);
                             }
-
                             break;
                         case DownloadManager.STATUS_PAUSED:
                             switch(errorCode) {
@@ -533,6 +602,7 @@ public class UpdateService extends Service {
                                     break;
                             }
                             Log.i(TAG,"[Paused] "+Reason);
+                            //postLogToBackEnd(ERROR,"downloadListener_006",Reason);
                             break;
                         case DownloadManager.STATUS_PENDING:
                             Log.i(TAG,"[Pending] Pending.");
@@ -554,7 +624,7 @@ public class UpdateService extends Service {
     }
 
     public void checkUpdateItem(DownloadFileInfo fileInfo){
-        if (fileInfo.bUpdate){
+        if (fileInfo.bForceUpdate){
             startUpdate(fileInfo);
         }else{
             //判断一下当前版本是否高于下载的版本并且是否有强制更新标志
@@ -593,21 +663,28 @@ public class UpdateService extends Service {
             }
         }
     }
-    public void clearCacheFiles(DownloadFileInfo fileInfo){
-        //删除所有下载的文件
-        for (String fileName:fileNames) {
-            if (fileIsExists(fileInfo.path+fileName)){
-                Log.i(TAG,"Clear download package:"+fileName+" success");
-                postLogToBackEnd(INFO,"startUpdate_004","Clear download package:"+fileName+" success");
-            }else{
-                Log.i(TAG,"Clear download package:"+fileName+" fail");
-                postLogToBackEnd(ERROR,"startUpdate_005","Clear download package:"+fileName+" fail");
+    public void clearCacheFiles(){
+        try{
+            //删除所有下载的文件
+            for (String fileName:fileNames) {
+                Log.i(TAG,"To be deleted file name:"+fileName);
+                if (fileIsExists(strDownLoadPath+fileName)){
+                    Log.i(TAG,"Clear download package:"+fileName+" success");
+                    postLogToBackEnd(INFO,"startUpdate_004","Clear download package:"+fileName+" success");
+                }else{
+                    Log.i(TAG,"Clear download package:"+fileName+" fail");
+                    postLogToBackEnd(ERROR,"startUpdate_005","Clear download package:"+fileName+" fail");
+                }
             }
+            Log.i(TAG,"Download APP finish all task ,shutdown...");
+            postLogToBackEnd(INFO,"clearCacheFiles","Download APP finish all task ,shutdown...");
+            stopSelf();
+        }catch (Exception e){
+            Log.e(TAG,"Error while clearCache:"+e.toString());
+            postLogToBackEnd(INFO,"clearCacheFiles_01","Error while clearCache:"+e.toString());
         }
-        Log.i(TAG,"Download APP finish all task ,shutdown...");
-        postLogToBackEnd(INFO,"startUpdate_006","Download APP finish all task ,shutdown...");
-        stopSelf();
 
+        //saioService.reboot("TMSDownLoad Service Reboot test");
     }
     //启动Agent
     public void startAgent(){
@@ -622,7 +699,7 @@ public class UpdateService extends Service {
             //postLogToBackEnd("100");
         }
     }
-
+  //private  Boolean bFinishReDownload=false;
     public void startUpdate(final DownloadFileInfo fileInfo){
 
         try{
@@ -658,8 +735,8 @@ public class UpdateService extends Service {
                                     Log.i(TAG, "Package:" + strCurrentFilePackageName + " installed");
                                     break;
                             }
-                            updateResult(fileInfo);
 
+                          //  updateResult(fileInfo);
                         } else {
                             strResult = "Install " + fileInfo.fileName + " failed, return code = " + retCode;
                             //尝试重新安装
@@ -669,9 +746,10 @@ public class UpdateService extends Service {
                             }else{
                                 bFailedInstalled++;
                                 Log.e(TAG,"Install failed 5 times : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled);
-                               // postLogToBackEnd(ERROR,"startUpdate_002_1","Install failed 5 times : " + fileInfo.fileName);
+                               //postLogToBackEnd(ERROR,"startUpdate_002_1","Install failed 5 times : " + fileInfo.fileName);
                                 postLogToBackEnd(INFO,"startUpdate_002_2",("Install failed 5 times : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled));
-                                updateResult(fileInfo);
+                              // updateResult(fileInfo);
+
                             }
                         }
                         if (!strResult.isEmpty()){
@@ -679,6 +757,7 @@ public class UpdateService extends Service {
                             postLogToBackEnd(INFO,"startUpdate_003","[Install ] " + strResult);
                         }
                         packageManager.finish();
+                        updateResult(fileInfo);
                     }
                 }
             };
@@ -687,31 +766,38 @@ public class UpdateService extends Service {
         }catch(Exception e){
           Log.e(TAG,"startUpdate->FileName:"+fileInfo.fileName+" get Exception"+e.toString());
             bFailedInstalled++;
+           // clearCacheFiles(fileInfo);
             Log.e(TAG,"Install exception failed,File : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled);
             postLogToBackEnd(ERROR,"startUpdate_004",e.toString());
             postLogToBackEnd(INFO,"startUpdate_005",("Install failed 5 times : " + fileInfo.fileName+" Failed install counts:"+bFailedInstalled));
             updateResult(fileInfo);
         }
-
     }
 
-    public void updateResult(DownloadFileInfo fileInfo){
+    public void updateResult(final DownloadFileInfo fileInfo){
         try{
-            if ((installedAPPCounts+bFailedInstalled)==listUrls.size()){
-                Log.i(TAG,"--updateResult--: installedAPPCount:"+installedAPPCounts+" FailedInstalled:"+bFailedInstalled+" Total need to installed APP counts:"+listUrls.size());
-                clearCacheFiles(fileInfo);
-                if (!checkFinishStatus()){
-                    postLogToBackEnd(ERROR,"startUpdate_003","Some APKs are not same as server version");
-                }else{
-                    postLogToBackEnd(INFO,"startUpdate_004","All APKS update success");
-                }
+
+            if ((installedAPPCounts+bFailedInstalled)==lists.size()){
+                Thread.sleep(60000);
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(TAG,"--updateResult--: installedAPPCount:"+installedAPPCounts+" FailedInstalled:"+bFailedInstalled+" Total need to installed APP counts:"+lists.size());
+                        postLogToBackEnd(INFO,"--updateResult--",("--updateResult--: installedAPPCount:"+installedAPPCounts+" FailedInstalled:"+bFailedInstalled+" Total need to installed APP counts:"+lists.size()));
+                        if (!checkFinishStatus()){
+                            postLogToBackEnd(ERROR,"startUpdate_003","Some APKs are not same as server version");
+                        }else{
+                            postLogToBackEnd(INFO,"startUpdate_004","All APKS update success");
+                        }
+                        clearCacheFiles();
+                    }
+                }).start();
             }
         }
         catch (Exception e){
           Log.e(TAG,"updateResult_DF"+e.toString());
             postLogToBackEnd(ERROR,"startUpdate_005",e.toString());
         }
-
     }
 
     //检查安装后的结果
@@ -734,7 +820,6 @@ public class UpdateService extends Service {
                 postLogToBackEnd(ERROR,"checkFinishStatus_002","Current agentSDK version is not same as server agentSDK version");
 
             }else{
-
                 Log.i(TAG,"agentSDK check OK");
             }
         }

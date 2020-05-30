@@ -11,8 +11,12 @@ public class DownloadFileInfo {
     //对象
     public File file;
     //是否强制更新
-    public Boolean bUpdate;
+    public Boolean bForceUpdate;
 
+    //最终是否要更新
+    public Boolean bRealUpdate;
+    //packageName
+    public String packageName;
     //APK的版本
     public long versionCode;
     //文件类型
